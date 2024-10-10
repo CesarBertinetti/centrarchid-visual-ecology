@@ -56,21 +56,8 @@ DATA & FILE OVERVIEW
 
 The "Script.Rmd" contains the code to replicate the analysis in R Software.
 
-The analysis was performed running R version 4.4.1 (2024-06-14) on macOS aarch64-apple-darwin20. The following packages were used:
+The analysis was performed running R version 4.4.1 (2024-06-14) on macOS aarch64-apple-darwin20.
 
-  BiocManager       gplots        edgeR       Glimma        limma        vegan 
-  "1.30.25'    '3.1.3.1'      '4.2.1'     '2.14.0'     '3.60.4'      '2.6-8' 
-  lattice      permute       partR2    ggfortify    agricolae       pander 
-  '0.22-6'      '0.9-7'      '0.9.2'     '0.4.17'      '1.3-7'      '0.6.5' 
-  lme4           Matrix          rsq       pracma         gridExtra    ggplot2 
-  '1.1-35.5'      '1.7-0'        '2.6'      '2.4.4'        '2.3'      '3.5.1' 
-   car        carData         zoo         MESS    RColorBrewer    plotrix 
- '3.1-3'      '3.0-5'     '1.8-12'     '0.5.12'      '1.1-3'      '3.8-4' 
-  tidyr        dplyr     matrixStats      stringr        readr 
-  '1.3.1'      '1.1.4'      '1.4.1'      '1.5.1'      '2.1.5'
-
-
-
-The "Script.html" file provides a more reader-friendly version of the code which allows to preview of the output of single steps. This is also available at https://cesarbertinetti.weebly.com/sharing.html.
+The "Script.html" file provides a more reader-friendly version of the code which allows to preview of the output of single steps. This is also available at https://cesarbertinetti.weebly.com/sharing.html
 
 
