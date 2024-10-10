@@ -54,7 +54,7 @@ DATA & FILE OVERVIEW
 
 - Visual_Genes.csv; contains the normalized TMMS counts for visual opsin genes and cyp17c1. It also includes the proportional expression of each gene and the predicted sensitivity index (PSI)
 
-The "Script.Rmd" contains the code to replicate the analysis in R Software. Alternatively, a GitHub repository is available at https://github.com/CesarBertinetti/
+The "Script.Rmd" contains the code to replicate the analysis in R Software.
 
 The analysis was performed running R version 4.4.1 (2024-06-14) on macOS aarch64-apple-darwin20. The following packages were used:
 
