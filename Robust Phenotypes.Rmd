@@ -1,0 +1,279 @@
+---
+title: "Code from: Robust sensory traits across light habitats"
+author: "César Bertinetti"
+date: "September 2024"
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+---
+
+<style type="text/css">
+
+h1.title {
+  font-size: 28px;
+  color: Black;
+  text-align: justify;
+}
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Helvetica", Times, serif;
+  color: Black;
+  text-align: justify;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Helvetica", Times, serif;
+  color: Black;
+  text-align: justify;
+}
+</style>
+
+<style>
+pre {
+  font-size: 14px;
+}
+</style>
+
+<br/>
+
+The datasets needed to reproduce this analysis are deposited on Bertinetti et al. 2024. Data from: *Robust sensory traits across light habitats: Visual signals but not receptors vary in centrarchids inhabiting distinct photic environments* [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.13910039
+
+Following packages are required:
+
+```{r include=FALSE}
+pak <- c("readr", "stringr", "matrixStats","dplyr","tidyr","plotrix","RColorBrewer",
+         "MESS","zoo","car","ggplot2","gridExtra","stringr","pracma","rsq","lme4",
+         "pander","agricolae", "ggfortify", "partR2","vegan","limma",
+         "Glimma","edgeR","gplots","BiocManager")
+lapply(pak, require, character.only = TRUE) #check if packages are installed
+``` 
+
+```{r, include=TRUE}
+
+R.version$platform
+R.version$version.string
+installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+
+```
+
+## Irradiance raw measurements ##
+
+The "LightData.zip" contains the raw irradiance measurements, the normalized irradiance and the photic factors
+
+```{r}
+absir  <-readRDS("LightData/Absolute_Irradiance.Rds") # read measurements
+photic <- read.table("LightData/Photic factors.csv", stringsAsFactors=T, header = T, sep=",", dec = ".") [-1] 
+# contains photic variables
+
+
+### PLOT ONE EXAMPLE OF ABSOLUTE IRRADIANCE
+pig <- c("#56B4E9","#009E73","#D55E00")
+plot( absir$BIGARBORVITAE$d_1m[-c(1:37)] ~ absir$BIGARBORVITAE$wl[-c(1:37)], type = "l",axes=F, col = "#56B4E9", lwd=4,xlim=c(350,750),ylim=c(0,9.435e+14), yaxt="n",xaxt="n",ylab="",xlab="")
+#lines(absir$BAVBLOOM$d_1m[-c(1:37)]  ~ absir$BAVBLOOM$wl[-c(1:37)], col=pig[2], lwd=4)
+lines(absir$CRANBERRY$d_1m[-c(1:37)]  ~ absir$CRANBERRY$wl[-c(1:37)], col=pig[3], lwd=4)
+axis(side=1, at = c(seq(350,750, by=25)),font=2,lwd=3, labels = c(seq(350,750, by=25)), las = 1, cex = 1, col.axis = 1, cex.axis=1.5)
+axis(side=2, at= c(seq(0,9.435e+14 , by=1.5725e+14)), las = 2, lwd=3, font=2, line=-2, cex.axis=1.2)
+text(700,8.87e+14, "BIG ARBOR VITAE", col=pig[1],font=2)
+text(680,3.1e+14, "CRANBERRY", col=pig[3],font=2)
+mtext("ABS-IRRAD", font=2)
+```
+
+
+## Morphological Traits ##
+
+<br>The data associated with morphological traits is found in "Morphology.csv"
+
+```{r}
+morph <- read.table("Morphology.csv", header=T, sep =",", dec=".",stringsAsFactors = T)
+morp <- aov(rel_eye ~ SPEC, data= morph)
+(m2 <- LSD.test(morp, trt = c('SPEC'), p.adj = "fdr"))                
+plot(m2, variation = 'SE', lwd = 2, las = 1, horiz = T, xlab = 'combi')
+```
+
+## Differential Gene Expression ##
+
+<br> "Read_Counts_Table.csv" contains the table of raw read counts for each individual generated using STAR - Dobin et al. (2013). STAR: ultrafast universal RNA-seq aligner. Bioinformatics (Oxford, England), 29(1), 15–21 https://doi.org/10.1093/bioinformatics/bts635
+
+```{r}
+counts <- read.table("Read_Counts_Table.csv", header=T, sep =",", dec=".",stringsAsFactors = T, check.names = F, row.names = 1) 
+head(counts) # columns = sample_id , rows = gene_id
+
+## ALSO ATTACH METADATA ASSOCAIAED WITH EACH INDIVIDUAL
+sample.info <- read.table("SampleInfo.csv", header=T, sep =",", dec=".",stringsAsFactors = T) [,-1]
+
+```
+<br> Then generate DGElist, normalize and filter by expression:
+```{r, warning=F}
+
+data <- DGEList(counts, gene=rownames(counts), group=sample.info$Group,lib.size = colSums(counts), remove.zeros = 0)
+## data pre-processing
+# convert  gene counts into counts per million reads
+cpm <- cpm(data)
+# transform counts per million to log2 counts per million
+lcpm <- cpm(data , log = TRUE)
+# set filtering criteria
+keep.exprs2 <- filterByExpr(data , group = data$group , min.prop = .33 , min.count = 100)    # keep genes expressed at least at 100 cpm in one third of all samples in one group
+# filter the data based on previously set criteria
+dataF2 <- data[keep.exprs2,,keep.lib.sizes = FALSE]
+# dim(dataF2)   # 7947 genes kept with more stringent filtering
+## normalization of gene expression distributions
+dataF2 <- calcNormFactors(dataF2 , method = "TMM")
+lcpmF2 <- cpm(dataF2 , log = TRUE)      
+col <- brewer.pal(ncol(data), "Paired")
+boxplot(lcpmF2 , las = 2 ,col=col, main = "B. Normalized")
+```
+
+<br> Proceed to differential gene expression analysis
+```{r}
+#create a design matrix
+group <- dataF2$samples$group
+design <- model.matrix(~0+group)
+# change header
+colnames(design) <- gsub("group" , "" , colnames(design))
+# specify what contrasts to use for differential gene expression analysis
+contr.matrix <- makeContrasts( BLG = BLBAV - BLCY ,
+                               PK = PKBAV - PKCY ,
+                               RB = RBBAV - RBCY ,
+                               CR = CRBAV - CRCY,
+                               LB = LBBAV - LBCY,
+                               levels = colnames(design))
+contr.matrix
+# transform counts to log2 counts per million, estimate mean-variance relationship and compute appropriate weights
+v <- voom(dataF2 , design , plot = TRUE)
+# fitting linear models
+vfit <- lmFit(v , design)      # specify data and group design used for linear models
+vfit <- contrasts.fit(vfit , contrasts = contr.matrix)    # specify the contrasts to be used
+efit <- eBayes(vfit)
+plotSA(efit)     # residual standard deviation vs average log2 expression; no drop in standard deviation is good!
+# examine numbers of differentially expressed genes
+DEG <- decideTests(efit)
+summary(DEG)
+
+vennDiagram(DEG[,1:5] , circle.col = c("red" , "blue" , "green", "orange","violet"))
+```
+
+## Visual Opsin Gene and cyp27c1 Expression ##
+
+<br> "Visual_Genes.csv" contains the normalized counts (TMM) from the previous section, the proportional expression of each cone opsin and the predicted sensitivity index based on Carleton et al. (2016). Proximate and ultimate causes of variable visual sensitivities: Insights from cichlid fish radiations. Genesis (New York, N.Y. : 2000), 54(6), 299–325. https://doi.org/10.1002/dvg.22940
+
+```{r}
+opsin <- read.table("Visual_Genes.csv", header=T, sep =",", dec=".",stringsAsFactors = T) [,-1] 
+
+### THEN RUN STATISTICAL TST FOR EACH GENE REPLACING RESPECTIVELY (Here= "SWS2)
+
+#########
+#########       SWS2
+#########
+
+asws2 <- aov(rank(P_SWS2) ~ SPEC + SITE, data = opsin)
+par(mfrow=c(2,2))
+plot(asws2)
+Anova(asws2, type='2') 
+TukeyHSD(asws2)
+asws2b<- aov(rank(P_SWS2) ~ SPEC, data = opsin) ## FOR NORMAL DISTRIBUTION
+#(m2 <- HSD.test(asws2b, trt = c('combi'), unbalanced=T))      
+(m1 <- LSD.test(asws2b, trt = c('SPEC'), p.adj = "fdr")) 
+par(mfrow=c(1,1))
+plot(m1, variation = 'SE', lwd = 2, las = 1, horiz = F, xlab = 'sws2')
+
+```
+
+## Body Reflectance ##
+
+<br> Read the normalized individual reflectance measurements for each individual found in "Body_Reflectance.csv". Perform PCA, extract values along axis of major variation (PC1) and centroid distances for each species in each environment.
+
+```{r}
+reflectance <- read.table("Body_Reflectance.csv", header=T, sep =",", dec=".",stringsAsFactors = T, row.names = 1)
+
+## GENERATE PCS
+pca1 = prcomp(reflectance[,-c(1:3)], scale. = F,center=F) # KEEP ONLY NUMERIC VALUES
+s <- summary(pca1) # 0.78% variation + 10%
+pca1$x[,1] # points of samples on x-coordinate (Dim 1) to use for linear model
+
+### CREATE CONVEX HULLS (NOT ALL GROUPS NEEDED)
+tab <- matrix(c(pca1$x[,1], pca1$x[,2]), ncol=2)
+blbv <- tab[str_which(reflectance[,1],"BL.BV"),]
+blcy <- tab[str_which(reflectance[,1],"BL.CY"),]
+pkbl <- tab[str_which(reflectance[,1],"PK.BV"),]
+pkcy <- tab[str_which(reflectance[,1],"PK.CY"),]
+rbbv <- tab[str_which(reflectance[,1],"RB.BV"),]
+rbcy <- tab[str_which(reflectance[,1],"RB.CY"),]
+lbbv <- tab[str_which(reflectance[,1],"LB.BV"),]
+lbcy <- tab[str_which(reflectance[,1],"LB.CY"),]
+
+ch1 <- chull(blbv)
+ch2 <- chull(blcy)
+ch3 <- chull(pkbl)
+ch4 <- chull(pkcy)
+ch5 <- chull(rbbv)
+ch6 <- chull(rbcy)
+ch7 <- chull(lbbv)
+ch8 <- chull(lbcy)
+
+##### PLOT SCATTERPLOT + CONVEX HULLS
+# Plot
+par(mfrow=c(1,1),mar=c(4.5, 4.5, 1, 1),oma=c(1,1,1,0))
+plot(pca1$x[,1], pca1$x[,2], xlim=c(-2100, -200), ylim=c(-750, 600),axes=F, xlab=paste("PCA 1 (",
+     round(s$importance[2]*100, 1), "%)", sep = ""), ylab=paste("PCA 2 (", round(s$importance[5]*100, 1), "%)", sep = ""), 
+     pch=21, col=as.numeric(as.factor(reflectance$lake)), bg=as.numeric(as.factor(reflectance$lake)), cex=2.5, cex.axis=1.5, cex.lab=1.5, las=1,
+     panel.first= {
+       # Add convex hulls
+       polygon(blbv[ch1, ], border="blue", col=alpha("blue", 0.25), lwd=2)
+       polygon(blcy[ch2, ], border="red", col=alpha("red", 0.25), lwd=2)
+       polygon(pkbl[ch3, ], border="lightblue", col=alpha("lightblue", 0.25), lwd=2)
+       polygon(pkcy[ch4, ], border="darkred", col=alpha("darkred", 0.25), lwd=2)
+       polygon(rbbv[ch5, ], border="cyan", col=alpha("cyan", 0.25), lwd=2)
+       polygon(rbcy[ch6, ], border="magenta", col=alpha("magenta", 0.25), lwd=2)
+       polygon(lbbv[ch7, ], border="turquoise", col=alpha("turquoise", 0.25), lwd=2)
+       polygon(lbcy[ch8, ], border="orange", col=alpha("orange", 0.25), lwd=2)
+       # Add grid lines
+       abline(v=0, lty=2, col="grey50",lwd=0.5) 
+       abline(h=0, lty=2, col="grey50",lwd=0.5)
+     })
+axis(side=1, at= c(seq(-2100,-200, by=100)), labels=c(seq(-2100,-200, by=100)), cex.axis=1, font=2, las = 1, lwd=2, line=0)
+axis(side=2, at= c(seq(-800,600, by=100)), labels=c(seq(-800,600, by=100)), cex.axis=1, font=4, las = 2, lwd=2, line=0)
+text(pca1$x[,1], pca1$x[,2],labels=substr(rownames(reflectance), 7,12),
+     col=as.numeric(as.factor(substr(rownames(reflectance), 14,16))) ,offset=0.5, pos=4, cex = 0.5)
+
+```
+<br> Extract centroid distances:
+```{r}
+ordimat <- scale(reflectance[,-c(1:3)], scale = F, center = F) # remove column wiht names
+Idata.dist.t <- vegdist(ordimat, method = "euclidean")
+
+centroid_dist <- betadisper(Idata.dist.t, as.factor(reflectance$spec_pop),type='centroid')
+
+test_distances <- cbind(reflectance[,c(1:3)],centroid_dist$distances)
+colnames(test_distances)[4] <- "dist"
+
+## remove smallmouth bass (M. dolomieu) since only have one individual for each site
+test_distances <- test_distances %>% filter(!str_detect(spec, 'SB')) 
+test_distances$dist <- log(test_distances$dist) # log-transformed
+
+acol <- aov(dist ~ spec * lake, data= test_distances)
+Anova(acol, type='3')
+
+```
+
+
+```{r,echo=F}
+
+# SAME BUT JSUT FOR PLOTTING
+acolcombi <- aov(dist ~ spec_pop, data= test_distances) 
+m2 <- LSD.test(acolcombi, trt = c('spec_pop'), p.adj = "fdr")
+plot(m2, variation = 'SE', lwd = 2, las = 2, horiz = F, ylab="ln centroid dist") 
+```
+
+
+
+
+
+
+
+
+
+
+
+
